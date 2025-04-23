@@ -9,6 +9,18 @@ import * as os from 'os';
 import * as inquirer from 'inquirer';
 import * as chalk from 'chalk';
 
+// Define interface for MCP server configuration
+interface MCPServer {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+}
+
+// Define interface for Claude Desktop config
+interface ClaudeConfig {
+  mcpServers: Record<string, MCPServer>;
+}
+
 // Get Claude Desktop config file path based on OS
 function getClaudeConfigPath(): string {
   const homeDir = os.homedir();
@@ -43,7 +55,7 @@ async function updateClaudeConfig(): Promise<void> {
   await fs.ensureDir(configDir);
 
   // Create or read existing config
-  let config = { mcpServers: {} };
+  let config: ClaudeConfig = { mcpServers: {} };
   if (await fs.pathExists(configPath)) {
     try {
       const configData = await fs.readFile(configPath, 'utf8');
@@ -57,7 +69,7 @@ async function updateClaudeConfig(): Promise<void> {
   }
 
   // Check if server already exists
-  const hasServer = config.mcpServers['productiv-saas'];
+  const hasServer = config.mcpServers['productiv-saas'] !== undefined;
 
   if (hasServer) {
     const { updateExisting } = await inquirer.prompt([

@@ -31,8 +31,9 @@ export class Cache {
    * @param data Data to cache
    * @param ttl Time to live in seconds
    */
-  set(key: string, data: any, ttl: number): void {
-    const expires = Date.now() + ttl * 1000;
+  set(key: string, data: any, ttl: number | undefined): void {
+    const ttlValue = ttl || 60; // Default to 60 seconds if undefined
+    const expires = Date.now() + ttlValue * 1000;
     this.cache.set(key, { data, expires });
   }
 

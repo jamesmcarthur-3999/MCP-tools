@@ -3,6 +3,7 @@
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import type { Signals } from 'node:process';
 
 /**
  * CLI entry point for the Productiv MCP server
@@ -39,7 +40,7 @@ async function main() {
   });
 
   // Handle termination signals
-  const signals = ['SIGINT', 'SIGTERM'];
+  const signals: Signals[] = ['SIGINT', 'SIGTERM'];
   signals.forEach((signal) => {
     process.on(signal, () => {
       console.log(`\nReceived ${signal}, shutting down gracefully...`);

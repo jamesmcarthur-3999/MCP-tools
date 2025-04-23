@@ -75,20 +75,12 @@ function isToolsetEnabled(toolset: string): boolean {
   return enabledToolsets.includes(toolset);
 }
 
-// Define parameter types for tool functions
-type EmptyParams = Record<string, never>;
-type IdOrNameParams = { idOrName: string };
-type ApplicationUsageParams = { idOrName: string; period?: string };
-type SpendAnalyticsParams = { period?: string };
-type RenewalAlertsParams = { daysAhead?: number };
-type UnderutilizedAppsParams = { thresholdPercent?: number };
-
 // --- TOOL DEFINITIONS ---
 
 // Applications Toolset
 if (isToolsetEnabled('applications')) {
   // List all applications
-  server.tool('list_applications', EmptyParams, async () => {
+  server.tool('list_applications', {}, async () => {
     try {
       const applications = await productivAPI.getApplications();
       return {
@@ -108,7 +100,7 @@ if (isToolsetEnabled('applications')) {
   // Get application details
   server.tool('get_application_details', {
     idOrName: z.string().describe('Application ID or name')
-  }, async (params: IdOrNameParams) => {
+  }, async (params) => {
     const { idOrName } = params;
     try {
       // First try to fetch by ID
@@ -154,7 +146,7 @@ if (isToolsetEnabled('applications')) {
   server.tool('get_application_usage', {
     idOrName: z.string().describe('Application ID or name'),
     period: z.string().optional().describe('Time period for usage data (e.g., last30days, last90days)')
-  }, async (params: ApplicationUsageParams) => {
+  }, async (params) => {
     const { idOrName, period = 'last30days' } = params;
     try {
       let appId = idOrName;
@@ -195,7 +187,7 @@ if (isToolsetEnabled('applications')) {
 // Contracts Toolset
 if (isToolsetEnabled('contracts')) {
   // Get all contracts
-  server.tool('get_contracts', EmptyParams, async () => {
+  server.tool('get_contracts', {}, async () => {
     try {
       const contracts = await productivAPI.getContracts();
       return {
@@ -215,7 +207,7 @@ if (isToolsetEnabled('contracts')) {
   // Get contracts for an application
   server.tool('get_application_contracts', {
     idOrName: z.string().describe('Application ID or name')
-  }, async (params: IdOrNameParams) => {
+  }, async (params) => {
     const { idOrName } = params;
     try {
       let appId = idOrName;
@@ -258,7 +250,7 @@ if (isToolsetEnabled('licenses')) {
   // Get licenses for an application
   server.tool('get_application_licenses', {
     idOrName: z.string().describe('Application ID or name')
-  }, async (params: IdOrNameParams) => {
+  }, async (params) => {
     const { idOrName } = params;
     try {
       let appId = idOrName;
@@ -299,7 +291,7 @@ if (isToolsetEnabled('licenses')) {
 // Security Toolset
 if (isToolsetEnabled('security')) {
   // Get shadow IT applications
-  server.tool('get_shadow_it', EmptyParams, async () => {
+  server.tool('get_shadow_it', {}, async () => {
     try {
       const shadowIT = await productivAPI.getShadowIT();
       return {
@@ -322,7 +314,7 @@ if (isToolsetEnabled('analytics')) {
   // Get spend analytics
   server.tool('get_spend_analytics', {
     period: z.string().optional().describe('Time period for analytics (e.g., last12months)')
-  }, async (params: SpendAnalyticsParams) => {
+  }, async (params) => {
     const { period = 'last12months' } = params;
     try {
       const spendAnalytics = await productivAPI.getSpendAnalytics(period);
@@ -344,7 +336,7 @@ if (isToolsetEnabled('analytics')) {
 // Recommendations Toolset
 if (isToolsetEnabled('recommendations')) {
   // Get license optimization recommendations
-  server.tool('get_license_recommendations', EmptyParams, async () => {
+  server.tool('get_license_recommendations', {}, async () => {
     try {
       const recommendations = await productivAPI.getLicenseRecommendations();
       return {
@@ -364,7 +356,7 @@ if (isToolsetEnabled('recommendations')) {
   // Get upcoming renewal alerts
   server.tool('get_renewal_alerts', {
     daysAhead: z.number().optional().describe('Number of days ahead to look for renewals')
-  }, async (params: RenewalAlertsParams) => {
+  }, async (params) => {
     const { daysAhead = 90 } = params;
     try {
       const alerts = await productivAPI.getRenewalAlerts(daysAhead);
@@ -385,7 +377,7 @@ if (isToolsetEnabled('recommendations')) {
   // Find underutilized applications
   server.tool('find_underutilized_applications', {
     thresholdPercent: z.number().optional().describe('Usage threshold percentage (e.g., 50 for 50%)')
-  }, async (params: UnderutilizedAppsParams) => {
+  }, async (params) => {
     const { thresholdPercent = 50 } = params;
     try {
       const applications = await productivAPI.getApplications();
@@ -474,7 +466,7 @@ async function main() {
     if (enableHttpTransport) {
       logger.info(`Starting HTTP transport on port ${httpPort}`);
       const httpTransport = new StreamableHTTPServerTransport({
-        listenOptions: { port: httpPort }
+        port: httpPort
       });
       await server.connect(httpTransport);
       logger.info(`HTTP transport started on port ${httpPort}`);

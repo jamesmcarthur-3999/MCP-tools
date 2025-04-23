@@ -9,6 +9,16 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { productivAPI } from './services/api';
 import { handleApiError } from './utils/error';
+import {
+  Application,
+  ApplicationUsage,
+  Contract,
+  License,
+  ShadowIT,
+  SpendAnalytics,
+  LicenseRecommendation,
+  RenewalAlert
+} from './models/types';
 
 // Server configuration
 const SERVER_NAME = 'Productiv SaaS Management';

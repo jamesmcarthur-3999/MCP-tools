@@ -82,7 +82,7 @@ if (isToolsetEnabled('applications')) {
   // List all applications
   server.tool(
     'list_applications',
-    {},
+    '',
     async () => {
       try {
         const applications = await productivAPI.getApplications();
@@ -105,9 +105,9 @@ if (isToolsetEnabled('applications')) {
   // Get application details
   server.tool(
     'get_application_details',
-    {
+    z.object({
       idOrName: z.string().describe('Application ID or name')
-    },
+    }),
     async ({ idOrName }) => {
       try {
         // First try to fetch by ID
@@ -154,10 +154,10 @@ if (isToolsetEnabled('applications')) {
   // Get application usage
   server.tool(
     'get_application_usage',
-    {
+    z.object({
       idOrName: z.string().describe('Application ID or name'),
       period: z.string().optional().describe('Time period for usage data (e.g., last30days, last90days)')
-    },
+    }),
     async ({ idOrName, period = 'last30days' }) => {
       try {
         let appId = idOrName;
@@ -202,7 +202,7 @@ if (isToolsetEnabled('contracts')) {
   // Get all contracts
   server.tool(
     'get_contracts',
-    {},
+    '',
     async () => {
       try {
         const contracts = await productivAPI.getContracts();
@@ -225,9 +225,9 @@ if (isToolsetEnabled('contracts')) {
   // Get contracts for an application
   server.tool(
     'get_application_contracts',
-    {
+    z.object({
       idOrName: z.string().describe('Application ID or name')
-    },
+    }),
     async ({ idOrName }) => {
       try {
         let appId = idOrName;
@@ -272,9 +272,9 @@ if (isToolsetEnabled('licenses')) {
   // Get licenses for an application
   server.tool(
     'get_application_licenses',
-    {
+    z.object({
       idOrName: z.string().describe('Application ID or name')
-    },
+    }),
     async ({ idOrName }) => {
       try {
         let appId = idOrName;
@@ -319,7 +319,7 @@ if (isToolsetEnabled('security')) {
   // Get shadow IT applications
   server.tool(
     'get_shadow_it',
-    {},
+    '',
     async () => {
       try {
         const shadowIT = await productivAPI.getShadowIT();
@@ -345,9 +345,9 @@ if (isToolsetEnabled('analytics')) {
   // Get spend analytics
   server.tool(
     'get_spend_analytics',
-    {
+    z.object({
       period: z.string().optional().describe('Time period for analytics (e.g., last12months)')
-    },
+    }),
     async ({ period = 'last12months' }) => {
       try {
         const spendAnalytics = await productivAPI.getSpendAnalytics(period);
@@ -373,7 +373,7 @@ if (isToolsetEnabled('recommendations')) {
   // Get license optimization recommendations
   server.tool(
     'get_license_recommendations',
-    {},
+    '',
     async () => {
       try {
         const recommendations = await productivAPI.getLicenseRecommendations();
@@ -396,9 +396,9 @@ if (isToolsetEnabled('recommendations')) {
   // Get upcoming renewal alerts
   server.tool(
     'get_renewal_alerts',
-    {
+    z.object({
       daysAhead: z.number().optional().describe('Number of days ahead to look for renewals')
-    },
+    }),
     async ({ daysAhead = 90 }) => {
       try {
         const alerts = await productivAPI.getRenewalAlerts(daysAhead);
@@ -421,9 +421,9 @@ if (isToolsetEnabled('recommendations')) {
   // Find underutilized applications
   server.tool(
     'find_underutilized_applications',
-    {
+    z.object({
       thresholdPercent: z.number().optional().describe('Usage threshold percentage (e.g., 50 for 50%)')
-    },
+    }),
     async ({ thresholdPercent = 50 }) => {
       try {
         const applications = await productivAPI.getApplications();
@@ -514,7 +514,7 @@ async function main() {
     if (enableHttpTransport) {
       logger.info(`Starting HTTP transport on port ${httpPort}`);
       const httpTransport = new StreamableHTTPServerTransport({
-        listenOptions: { port: httpPort }
+        port: httpPort
       });
       await server.connect(httpTransport);
       logger.info(`HTTP transport started on port ${httpPort}`);

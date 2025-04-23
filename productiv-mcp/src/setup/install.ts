@@ -69,7 +69,7 @@ async function updateClaudeConfig(): Promise<void> {
   }
 
   // Check if server already exists
-  const hasServer = config.mcpServers['productiv-saas'] !== undefined;
+  const hasServer = 'productiv-saas' in config.mcpServers;
 
   if (hasServer) {
     const { updateExisting } = await inquirer.prompt([

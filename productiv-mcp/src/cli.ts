@@ -39,7 +39,7 @@ async function main() {
   });
 
   // Handle termination signals
-  const signals = ['SIGINT', 'SIGTERM'];
+  const signals: Array<'SIGINT' | 'SIGTERM'> = ['SIGINT', 'SIGTERM'];
   signals.forEach((signal) => {
     process.on(signal, () => {
       console.log(`\nReceived ${signal}, shutting down gracefully...`);

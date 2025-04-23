@@ -1,19 +1,15 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { 
+  ListToolsRequestSchema, 
+  CallToolRequestSchema, 
+  ErrorCode, 
+  McpError 
+} from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { productivAPI } from './services/api';
-import { ErrorCode, McpError, handleApiError } from './utils/error';
-import {
-  Application,
-  ApplicationUsage,
-  Contract,
-  License,
-  ShadowIT,
-  SpendAnalytics,
-  LicenseRecommendation,
-  RenewalAlert
-} from './models/types';
+import { handleApiError } from './utils/error';
 
 // Server configuration
 const SERVER_NAME = 'Productiv SaaS Management';
@@ -42,9 +38,13 @@ const enabledToolsets = process.env.MCP_ENABLED_TOOLSETS
   : ['all']; // Default to all toolsets
 
 // Create MCP server instance
-const server = new McpServer({ 
-  name: SERVER_NAME, 
-  version: SERVER_VERSION 
+const server = new Server({
+  name: SERVER_NAME,
+  version: SERVER_VERSION
+}, {
+  capabilities: {
+    tools: {}
+  }
 });
 
 // Logger setup
@@ -75,16 +75,202 @@ function isToolsetEnabled(toolset: string): boolean {
   return enabledToolsets.includes(toolset);
 }
 
-// --- TOOL DEFINITIONS ---
+// --- Define all available tools ---
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  logger.info(`Listing available tools`);
+  
+  const tools = [];
+  
+  // Applications Toolset
+  if (isToolsetEnabled('applications')) {
+    tools.push({
+      name: 'list_applications',
+      description: 'Get a list of all applications in the SaaS portfolio',
+      category: 'applications',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    });
+    
+    tools.push({
+      name: 'get_application_details',
+      description: 'Get detailed information about a specific application by ID or name',
+      category: 'applications',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          idOrName: {
+            type: 'string',
+            description: 'Application ID or name'
+          }
+        },
+        required: ['idOrName']
+      }
+    });
+    
+    tools.push({
+      name: 'get_application_usage',
+      description: 'Get usage analytics for an application, including active users and feature usage',
+      category: 'applications',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          idOrName: {
+            type: 'string',
+            description: 'Application ID or name'
+          },
+          period: {
+            type: 'string',
+            description: 'Time period for usage data (e.g., last30days, last90days)'
+          }
+        },
+        required: ['idOrName']
+      }
+    });
+  }
+  
+  // Contracts Toolset
+  if (isToolsetEnabled('contracts')) {
+    tools.push({
+      name: 'get_contracts',
+      description: 'Get a list of all contracts',
+      category: 'contracts',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    });
+    
+    tools.push({
+      name: 'get_application_contracts',
+      description: 'Get contracts for a specific application',
+      category: 'contracts',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          idOrName: {
+            type: 'string',
+            description: 'Application ID or name'
+          }
+        },
+        required: ['idOrName']
+      }
+    });
+  }
+  
+  // Licenses Toolset
+  if (isToolsetEnabled('licenses')) {
+    tools.push({
+      name: 'get_application_licenses',
+      description: 'Get licenses for a specific application',
+      category: 'licenses',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          idOrName: {
+            type: 'string',
+            description: 'Application ID or name'
+          }
+        },
+        required: ['idOrName']
+      }
+    });
+  }
+  
+  // Security Toolset
+  if (isToolsetEnabled('security')) {
+    tools.push({
+      name: 'get_shadow_it',
+      description: 'Get shadow IT applications that have been detected',
+      category: 'security',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    });
+  }
+  
+  // Analytics Toolset
+  if (isToolsetEnabled('analytics')) {
+    tools.push({
+      name: 'get_spend_analytics',
+      description: 'Get spend analytics data',
+      category: 'analytics',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            description: 'Time period for analytics (e.g., last12months)'
+          }
+        },
+        required: []
+      }
+    });
+  }
+  
+  // Recommendations Toolset
+  if (isToolsetEnabled('recommendations')) {
+    tools.push({
+      name: 'get_license_recommendations',
+      description: 'Get license optimization recommendations',
+      category: 'recommendations',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    });
+    
+    tools.push({
+      name: 'get_renewal_alerts',
+      description: 'Get upcoming contract renewal alerts',
+      category: 'recommendations',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          daysAhead: {
+            type: 'number',
+            description: 'Number of days ahead to look for renewals'
+          }
+        },
+        required: []
+      }
+    });
+    
+    tools.push({
+      name: 'find_underutilized_applications',
+      description: 'Find applications with low usage rates and calculate potential savings',
+      category: 'recommendations',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          thresholdPercent: {
+            type: 'number',
+            description: 'Usage threshold percentage (e.g., 50 for 50%)'
+          }
+        },
+        required: []
+      }
+    });
+  }
+  
+  return { tools };
+});
 
-// Applications Toolset
-if (isToolsetEnabled('applications')) {
-  // List all applications
-  server.tool(
-    'list_applications',
-    '',
-    async () => {
-      try {
+// --- Handle tool execution ---
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  logger.info(`Tool call: ${request.params.name}`);
+  logger.debug(`Tool arguments: ${JSON.stringify(request.params.arguments)}`);
+  
+  try {
+    switch (request.params.name) {
+      // Applications Toolset
+      case 'list_applications': {
         const applications = await productivAPI.getApplications();
         return {
           content: [{ 
@@ -92,24 +278,11 @@ if (isToolsetEnabled('applications')) {
             text: JSON.stringify(applications, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, 'Failed to list applications');
       }
-    },
-    {
-      description: 'Get a list of all applications in the SaaS portfolio',
-      category: 'applications'
-    }
-  );
-
-  // Get application details
-  server.tool(
-    'get_application_details',
-    z.object({
-      idOrName: z.string().describe('Application ID or name')
-    }),
-    async ({ idOrName }) => {
-      try {
+      
+      case 'get_application_details': {
+        const { idOrName } = request.params.arguments;
+        
         // First try to fetch by ID
         try {
           const app = await productivAPI.getApplication(idOrName);
@@ -141,25 +314,10 @@ if (isToolsetEnabled('applications')) {
             }]
           };
         }
-      } catch (error) {
-        throw handleApiError(error, `Failed to get application details for ${idOrName}`);
       }
-    },
-    {
-      description: 'Get detailed information about a specific application by ID or name',
-      category: 'applications'
-    }
-  );
-
-  // Get application usage
-  server.tool(
-    'get_application_usage',
-    z.object({
-      idOrName: z.string().describe('Application ID or name'),
-      period: z.string().optional().describe('Time period for usage data (e.g., last30days, last90days)')
-    }),
-    async ({ idOrName, period = 'last30days' }) => {
-      try {
+      
+      case 'get_application_usage': {
+        const { idOrName, period = 'last30days' } = request.params.arguments;
         let appId = idOrName;
         
         // If not an ID, try to find by name
@@ -186,25 +344,10 @@ if (isToolsetEnabled('applications')) {
             text: JSON.stringify(usage, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, `Failed to get application usage for ${idOrName}`);
       }
-    },
-    {
-      description: 'Get usage analytics for an application, including active users and feature usage',
-      category: 'applications'
-    }
-  );
-}
-
-// Contracts Toolset
-if (isToolsetEnabled('contracts')) {
-  // Get all contracts
-  server.tool(
-    'get_contracts',
-    '',
-    async () => {
-      try {
+      
+      // Contracts Toolset
+      case 'get_contracts': {
         const contracts = await productivAPI.getContracts();
         return {
           content: [{ 
@@ -212,24 +355,10 @@ if (isToolsetEnabled('contracts')) {
             text: JSON.stringify(contracts, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, 'Failed to get contracts');
       }
-    },
-    {
-      description: 'Get a list of all contracts',
-      category: 'contracts'
-    }
-  );
-
-  // Get contracts for an application
-  server.tool(
-    'get_application_contracts',
-    z.object({
-      idOrName: z.string().describe('Application ID or name')
-    }),
-    async ({ idOrName }) => {
-      try {
+      
+      case 'get_application_contracts': {
+        const { idOrName } = request.params.arguments;
         let appId = idOrName;
         
         // If not an ID, try to find by name
@@ -256,27 +385,11 @@ if (isToolsetEnabled('contracts')) {
             text: JSON.stringify(contracts, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, `Failed to get contracts for application ${idOrName}`);
       }
-    },
-    {
-      description: 'Get contracts for a specific application',
-      category: 'contracts'
-    }
-  );
-}
-
-// Licenses Toolset
-if (isToolsetEnabled('licenses')) {
-  // Get licenses for an application
-  server.tool(
-    'get_application_licenses',
-    z.object({
-      idOrName: z.string().describe('Application ID or name')
-    }),
-    async ({ idOrName }) => {
-      try {
+      
+      // Licenses Toolset
+      case 'get_application_licenses': {
+        const { idOrName } = request.params.arguments;
         let appId = idOrName;
         
         // If not an ID, try to find by name
@@ -303,25 +416,10 @@ if (isToolsetEnabled('licenses')) {
             text: JSON.stringify(licenses, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, `Failed to get licenses for application ${idOrName}`);
       }
-    },
-    {
-      description: 'Get licenses for a specific application',
-      category: 'licenses'
-    }
-  );
-}
-
-// Security Toolset
-if (isToolsetEnabled('security')) {
-  // Get shadow IT applications
-  server.tool(
-    'get_shadow_it',
-    '',
-    async () => {
-      try {
+      
+      // Security Toolset
+      case 'get_shadow_it': {
         const shadowIT = await productivAPI.getShadowIT();
         return {
           content: [{ 
@@ -329,27 +427,11 @@ if (isToolsetEnabled('security')) {
             text: JSON.stringify(shadowIT, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, 'Failed to get shadow IT');
       }
-    },
-    {
-      description: 'Get shadow IT applications that have been detected',
-      category: 'security'
-    }
-  );
-}
-
-// Analytics Toolset
-if (isToolsetEnabled('analytics')) {
-  // Get spend analytics
-  server.tool(
-    'get_spend_analytics',
-    z.object({
-      period: z.string().optional().describe('Time period for analytics (e.g., last12months)')
-    }),
-    async ({ period = 'last12months' }) => {
-      try {
+      
+      // Analytics Toolset
+      case 'get_spend_analytics': {
+        const { period = 'last12months' } = request.params.arguments;
         const spendAnalytics = await productivAPI.getSpendAnalytics(period);
         return {
           content: [{ 
@@ -357,25 +439,10 @@ if (isToolsetEnabled('analytics')) {
             text: JSON.stringify(spendAnalytics, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, 'Failed to get spend analytics');
       }
-    },
-    {
-      description: 'Get spend analytics data',
-      category: 'analytics'
-    }
-  );
-}
-
-// Recommendations Toolset
-if (isToolsetEnabled('recommendations')) {
-  // Get license optimization recommendations
-  server.tool(
-    'get_license_recommendations',
-    '',
-    async () => {
-      try {
+      
+      // Recommendations Toolset
+      case 'get_license_recommendations': {
         const recommendations = await productivAPI.getLicenseRecommendations();
         return {
           content: [{ 
@@ -383,24 +450,10 @@ if (isToolsetEnabled('recommendations')) {
             text: JSON.stringify(recommendations, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, 'Failed to get license recommendations');
       }
-    },
-    {
-      description: 'Get license optimization recommendations',
-      category: 'recommendations'
-    }
-  );
-
-  // Get upcoming renewal alerts
-  server.tool(
-    'get_renewal_alerts',
-    z.object({
-      daysAhead: z.number().optional().describe('Number of days ahead to look for renewals')
-    }),
-    async ({ daysAhead = 90 }) => {
-      try {
+      
+      case 'get_renewal_alerts': {
+        const { daysAhead = 90 } = request.params.arguments;
         const alerts = await productivAPI.getRenewalAlerts(daysAhead);
         return {
           content: [{ 
@@ -408,24 +461,10 @@ if (isToolsetEnabled('recommendations')) {
             text: JSON.stringify(alerts, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, 'Failed to get renewal alerts');
       }
-    },
-    {
-      description: 'Get upcoming contract renewal alerts',
-      category: 'recommendations'
-    }
-  );
-
-  // Find underutilized applications
-  server.tool(
-    'find_underutilized_applications',
-    z.object({
-      thresholdPercent: z.number().optional().describe('Usage threshold percentage (e.g., 50 for 50%)')
-    }),
-    async ({ thresholdPercent = 50 }) => {
-      try {
+      
+      case 'find_underutilized_applications': {
+        const { thresholdPercent = 50 } = request.params.arguments;
         const applications = await productivAPI.getApplications();
         const results = [];
         
@@ -491,16 +530,21 @@ if (isToolsetEnabled('recommendations')) {
             text: JSON.stringify(sortedResults, null, 2) 
           }]
         };
-      } catch (error) {
-        throw handleApiError(error, 'Failed to find underutilized applications');
       }
-    },
-    {
-      description: 'Find applications with low usage rates and calculate potential savings',
-      category: 'recommendations'
+      
+      default:
+        throw new McpError(ErrorCode.ToolNotFound, `Tool not found: ${request.params.name}`);
     }
-  );
-}
+  } catch (error) {
+    logger.error(`Tool execution error:`, error);
+    
+    if (error instanceof McpError) {
+      throw error;
+    }
+    
+    throw handleApiError(error, `Failed to execute tool: ${request.params.name}`);
+  }
+});
 
 /**
  * Start the MCP server with the appropriate transport

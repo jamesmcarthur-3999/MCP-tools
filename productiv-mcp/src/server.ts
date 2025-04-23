@@ -20,10 +20,21 @@ const SERVER_NAME = 'Productiv SaaS Management';
 const SERVER_VERSION = '1.0.0';
 const DEFAULT_PORT = 3000;
 
+// Protocol version handling
+const SUPPORTED_PROTOCOL_VERSIONS = ['1.0', '1.1', '1.2'];
+const DEFAULT_PROTOCOL_VERSION = '1.0';
+
 // Environment variables
 const enableHttpTransport = process.env.MCP_ENABLE_HTTP_TRANSPORT === 'true';
 const httpPort = parseInt(process.env.MCP_HTTP_PORT || DEFAULT_PORT.toString(), 10);
 const debugMode = process.env.MCP_DEBUG_MODE === 'true';
+const protocolVersion = process.env.MCP_PROTOCOL_VERSION || DEFAULT_PROTOCOL_VERSION;
+
+// Validate protocol version
+if (!SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
+  console.error(`Unsupported protocol version: ${protocolVersion}. Supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(', ')}`);
+  process.exit(1);
+}
 
 // Get enabled toolsets from environment variable
 const enabledToolsets = process.env.MCP_ENABLED_TOOLSETS 
@@ -441,6 +452,7 @@ if (isToolsetEnabled('recommendations')) {
  */
 async function main() {
   logger.info(`Starting ${SERVER_NAME} v${SERVER_VERSION}...`);
+  logger.info(`Protocol version: ${protocolVersion}`);
   logger.info(`Enabled toolsets: ${enabledToolsets.join(', ')}`);
   
   try {

@@ -172,15 +172,29 @@ The Productiv API has rate limits. If you encounter rate limiting:
 1. Enable caching with longer TTLs by modifying the `DEFAULT_CACHE_TTL` values in `src/utils/cache.ts`
 2. Reduce the frequency of requests if possible
 
-## Testing with the MCP Inspector
+## Quick Guide for Inspection and Debugging
 
-To test the server without Claude Desktop, you can use the MCP Inspector:
+The MCP Inspector is a useful tool for testing and debugging your MCP server:
 
 ```bash
 npm run inspector
+# or
+npx @modelcontextprotocol/inspector ./dist/server.js
 ```
 
-This will open a web interface where you can test the tools provided by the server.
+This opens a web interface where you can:
+1. View all available tools
+2. Test tools by executing them with different parameters
+3. See detailed request/response information
+
+## Note About Implementation
+
+This server uses the @modelcontextprotocol/sdk version ^1.10.2, which implements the MCP protocol slightly differently than earlier versions. Instead of using the `.tool()` method, we use:
+
+1. `server.setRequestHandler(ListToolsRequestSchema, ...)` to define the available tools
+2. `server.setRequestHandler(CallToolRequestSchema, ...)` to handle tool execution
+
+This implementation approach follows the current MCP SDK guidelines and provides a more robust way to handle tool registration and execution.
 
 ## License
 

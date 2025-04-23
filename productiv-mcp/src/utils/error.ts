@@ -1,46 +1,30 @@
+import { ErrorCode as SdkErrorCode, McpError as SdkMcpError } from '@modelcontextprotocol/sdk/types.js';
+
 /**
  * Error codes for MCP server
+ * Extends the standard JSON-RPC error codes from the SDK
  */
-export enum ErrorCode {
-  // Standard JSON-RPC error codes
-  ParseError = -32700,
-  InvalidRequest = -32600,
-  MethodNotFound = -32601,
-  InvalidParams = -32602,
-  InternalError = -32603,
+export const ErrorCode = {
+  ...SdkErrorCode,
   
   // Custom error codes
-  AuthenticationError = -32000,
-  AuthorizationError = -32001,
-  RateLimitExceeded = -32002,
-  InvalidInputError = -32003,
-  ApiError = -32004,
-  CacheError = -32005
-}
+  AuthenticationError: -32000,
+  AuthorizationError: -32001,
+  RateLimitExceeded: -32002,
+  InvalidInputError: -32602, // Same as InvalidParams in standard JSON-RPC
+  ApiError: -32004,
+  CacheError: -32005
+};
 
 /**
  * Custom error class for MCP server errors
  */
-export class McpError extends Error {
-  readonly code: ErrorCode;
+export class McpError extends SdkMcpError {
   readonly data?: any;
 
-  constructor(code: ErrorCode, message: string, data?: any) {
-    super(message);
-    this.name = 'McpError';
-    this.code = code;
+  constructor(code: number, message: string, data?: any) {
+    super(code, message);
     this.data = data;
-  }
-
-  /**
-   * Create a JSON-RPC error object from this error
-   */
-  toJsonRpcError() {
-    return {
-      code: this.code,
-      message: this.message,
-      data: this.data,
-    };
   }
 }
 
@@ -57,7 +41,7 @@ export function handleApiError(error: unknown, defaultMessage: string = 'API err
   }
 
   const message = error instanceof Error ? error.message : defaultMessage;
-  const code = ErrorCode.ApiError;
+  const code = ErrorCode.InternalError;
   
   // If it's an Axios error with response data, include it
   const data = (error as any)?.response?.data;

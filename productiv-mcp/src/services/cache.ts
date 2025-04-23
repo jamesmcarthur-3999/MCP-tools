@@ -46,7 +46,12 @@ export class CacheService {
    */
   set<T>(key: string, value: T, ttl?: number): boolean {
     console.error(`[Cache] Setting cache for key: ${key}`);
-    return this.cache.set(key, value, ttl ? ttl : undefined);
+    // If ttl is provided, use it, otherwise pass undefined explicitly
+    if (ttl !== undefined) {
+      return this.cache.set(key, value, ttl);
+    } else {
+      return this.cache.set(key, value);
+    }
   }
 
   /**

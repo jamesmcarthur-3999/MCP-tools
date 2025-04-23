@@ -144,6 +144,44 @@ The server supports the following environment variables:
 - `npm run lint` - Lint the codebase
 - `npm run inspector` - Run the MCP inspector for debugging
 
+## Troubleshooting
+
+### Common Issues
+
+#### TypeScript Build Errors
+
+If you encounter TypeScript errors during build:
+
+1. Make sure you have TypeScript installed: `npm install -g typescript`
+2. Check that your Node.js version is compatible (v16+)
+3. Try clearing the node_modules and reinstalling: `rm -rf node_modules && npm install`
+
+#### Connection Issues with Claude Desktop
+
+If Claude Desktop cannot connect to the MCP server:
+
+1. Verify that the server is running (`npm run start`)
+2. Check your configuration in the Claude Desktop configuration file
+3. Ensure the Productiv API key is correct
+4. Restart Claude Desktop after making any configuration changes
+
+#### API Rate Limiting
+
+The Productiv API has rate limits. If you encounter rate limiting:
+
+1. Enable caching with longer TTLs by modifying the `DEFAULT_CACHE_TTL` values in `src/utils/cache.ts`
+2. Reduce the frequency of requests if possible
+
+## Testing with the MCP Inspector
+
+To test the server without Claude Desktop, you can use the MCP Inspector:
+
+```bash
+npm run inspector
+```
+
+This will open a web interface where you can test the tools provided by the server.
+
 ## License
 
 MIT

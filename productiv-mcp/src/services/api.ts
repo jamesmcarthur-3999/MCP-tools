@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import * as dotenv from 'dotenv';
 import {
   Application,
@@ -11,8 +11,7 @@ import {
   LicenseRecommendation,
   RenewalAlert
 } from '../models/types';
-import { cacheService, DEFAULT_CACHE_TTL } from './cache';
-import { McpError, ErrorCode, Errors } from '../utils/errors';
+import { cache, DEFAULT_CACHE_TTL } from '../utils/cache';
 
 dotenv.config();
 
@@ -21,6 +20,7 @@ dotenv.config();
  */
 export class ProductivAPI {
   private client: AxiosInstance;
+  private readonly logger: Console;
 
   constructor() {
     const apiKey = process.env.PRODUCTIV_API_KEY;
@@ -31,333 +31,339 @@ export class ProductivAPI {
       throw new Error('Productiv API key is required');
     }
 
-    // Log API configuration
-    console.error('[Setup] Initializing Productiv API client');
-    console.error(`[Setup] API URL: ${apiUrl}`);
-    console.error('[Setup] API Key: ********' + (apiKey.length > 8 ? apiKey.slice(-4) : '****'));
-
+    this.logger = console;
     this.client = axios.create({
       baseURL: apiUrl,
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000 // 30 second timeout
+      }
     });
 
-    // Add response interceptor for logging
-    this.client.interceptors.response.use(
-      response => {
-        console.error(`[API] ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
-        return response;
-      },
-      error => {
-        if (axios.isAxiosError(error)) {
-          const axiosError = error as AxiosError;
-          console.error(
-            `[API Error] ${axiosError.config?.method?.toUpperCase()} ${axiosError.config?.url} - ${axiosError.response?.status} ${axiosError.response?.statusText}`
-          );
-          
-          // Handle rate limiting
-          if (axiosError.response?.status === 429) {
-            const resetHeader = axiosError.response.headers['x-rate-limit-reset'];
-            const resetTime = resetHeader ? parseInt(resetHeader, 10) : undefined;
-            throw Errors.rateLimitExceeded(60, resetTime);
-          }
-          
-          // Handle authentication errors
-          if (axiosError.response?.status === 401) {
-            throw Errors.unauthorized('Invalid API key or unauthorized access');
-          }
-          
-          // Handle not found
-          if (axiosError.response?.status === 404) {
-            throw Errors.notFound('Resource', axiosError.config?.url || 'unknown');
-          }
-        }
-        
-        throw error;
-      }
-    );
+    // Set up request interceptor for logging
+    this.client.interceptors.request.use(config => {
+      this.logger.info(`[API] ${config.method?.toUpperCase()} ${config.url}`);
+      return config;
+    });
 
-    // Cache-enable API methods
-    this.getApplications = cacheService.cacheify(
-      this._getApplications.bind(this),
-      'applications',
-      DEFAULT_CACHE_TTL.APPLICATIONS
-    );
-    
-    this.getApplication = cacheService.cacheify(
-      this._getApplication.bind(this),
-      'application',
-      DEFAULT_CACHE_TTL.APPLICATION_DETAILS
-    );
-    
-    this.getApplicationUsage = cacheService.cacheify(
-      this._getApplicationUsage.bind(this),
-      'applicationUsage',
-      DEFAULT_CACHE_TTL.APPLICATION_USAGE
-    );
-    
-    this.getContracts = cacheService.cacheify(
-      this._getContracts.bind(this),
-      'contracts',
-      DEFAULT_CACHE_TTL.CONTRACTS
-    );
-    
-    this.getApplicationContracts = cacheService.cacheify(
-      this._getApplicationContracts.bind(this),
-      'applicationContracts',
-      DEFAULT_CACHE_TTL.CONTRACTS
-    );
-    
-    this.getApplicationLicenses = cacheService.cacheify(
-      this._getApplicationLicenses.bind(this),
-      'applicationLicenses',
-      DEFAULT_CACHE_TTL.LICENSES
-    );
-    
-    this.getUsers = cacheService.cacheify(
-      this._getUsers.bind(this),
-      'users',
-      DEFAULT_CACHE_TTL.USERS
-    );
-    
-    this.getShadowIT = cacheService.cacheify(
-      this._getShadowIT.bind(this),
-      'shadowIT',
-      DEFAULT_CACHE_TTL.SHADOW_IT
-    );
-    
-    this.getSpendAnalytics = cacheService.cacheify(
-      this._getSpendAnalytics.bind(this),
-      'spendAnalytics',
-      DEFAULT_CACHE_TTL.SPEND_ANALYTICS
-    );
-    
-    this.getLicenseRecommendations = cacheService.cacheify(
-      this._getLicenseRecommendations.bind(this),
-      'licenseRecommendations',
-      DEFAULT_CACHE_TTL.LICENSE_RECOMMENDATIONS
-    );
-    
-    this.getRenewalAlerts = cacheService.cacheify(
-      this._getRenewalAlerts.bind(this),
-      'renewalAlerts',
-      DEFAULT_CACHE_TTL.RENEWAL_ALERTS
+    // Set up response interceptor for error handling
+    this.client.interceptors.response.use(
+      response => response,
+      error => {
+        if (error.response) {
+          this.logger.error(
+            `[API] Error ${error.response.status}: ${error.response.statusText}`,
+            error.response.data
+          );
+        } else if (error.request) {
+          this.logger.error('[API] No response received', error.request);
+        } else {
+          this.logger.error('[API] Request error:', error.message);
+        }
+        return Promise.reject(error);
+      }
     );
   }
 
   /**
    * Get all applications in the SaaS portfolio
-   * This will be wrapped by the cacheify method
    */
-  private async _getApplications(): Promise<Application[]> {
+  async getApplications(): Promise<Application[]> {
+    const cacheKey = 'applications';
+    const cachedData = cache.get<Application[]>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info('[Cache] Using cached applications data');
+      return cachedData;
+    }
+
     try {
-      console.error('[API] Fetching all applications');
+      this.logger.info('[API] Fetching applications');
       const response: AxiosResponse<{ applications: Application[] }> = await this.client.get('/v1/applications');
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.applications, DEFAULT_CACHE_TTL.APPLICATIONS);
+      
       return response.data.applications;
     } catch (error) {
-      console.error('[API] Error fetching applications:', error);
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error('[API] Error fetching applications:', error);
+      throw error;
     }
   }
 
   /**
    * Get a specific application by ID
-   * This will be wrapped by the cacheify method
    */
-  private async _getApplication(id: string): Promise<Application> {
+  async getApplication(id: string): Promise<Application> {
+    const cacheKey = `application:${id}`;
+    const cachedData = cache.get<Application>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info(`[Cache] Using cached data for application ${id}`);
+      return cachedData;
+    }
+
     try {
-      console.error(`[API] Fetching application with ID: ${id}`);
+      this.logger.info(`[API] Fetching application ${id}`);
       const response: AxiosResponse<{ application: Application }> = await this.client.get(`/v1/applications/${id}`);
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.application, DEFAULT_CACHE_TTL.APPLICATION_DETAILS);
+      
       return response.data.application;
     } catch (error) {
-      console.error(`[API] Error fetching application ${id}:`, error);
-      
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        throw Errors.notFound('Application', id);
-      }
-      
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error(`[API] Error fetching application ${id}:`, error);
+      throw error;
     }
   }
 
   /**
    * Get usage data for an application
-   * This will be wrapped by the cacheify method
    */
-  private async _getApplicationUsage(id: string, period: string = 'last30days'): Promise<ApplicationUsage> {
+  async getApplicationUsage(id: string, period: string = 'last30days'): Promise<ApplicationUsage> {
+    const cacheKey = `application:${id}:usage:${period}`;
+    const cachedData = cache.get<ApplicationUsage>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info(`[Cache] Using cached usage data for application ${id}`);
+      return cachedData;
+    }
+
     try {
-      console.error(`[API] Fetching usage for application ${id} (period: ${period})`);
-      const response: AxiosResponse<{ usage: ApplicationUsage }> = await this.client.get(`/v1/applications/${id}/usage`, {
-        params: { period }
-      });
+      this.logger.info(`[API] Fetching usage for application ${id}`);
+      const response: AxiosResponse<{ usage: ApplicationUsage }> = await this.client.get(
+        `/v1/applications/${id}/usage`, 
+        { params: { period } }
+      );
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.usage, DEFAULT_CACHE_TTL.APPLICATION_USAGE);
+      
       return response.data.usage;
     } catch (error) {
-      console.error(`[API] Error fetching usage for application ${id}:`, error);
-      
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        throw Errors.notFound('Application', id);
-      }
-      
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error(`[API] Error fetching usage for application ${id}:`, error);
+      throw error;
     }
   }
 
   /**
    * Get all contracts
-   * This will be wrapped by the cacheify method
    */
-  private async _getContracts(): Promise<Contract[]> {
+  async getContracts(): Promise<Contract[]> {
+    const cacheKey = 'contracts';
+    const cachedData = cache.get<Contract[]>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info('[Cache] Using cached contracts data');
+      return cachedData;
+    }
+
     try {
-      console.error('[API] Fetching all contracts');
+      this.logger.info('[API] Fetching contracts');
       const response: AxiosResponse<{ contracts: Contract[] }> = await this.client.get('/v1/contracts');
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.contracts, DEFAULT_CACHE_TTL.CONTRACTS);
+      
       return response.data.contracts;
     } catch (error) {
-      console.error('[API] Error fetching contracts:', error);
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error('[API] Error fetching contracts:', error);
+      throw error;
     }
   }
 
   /**
    * Get contracts for a specific application
-   * This will be wrapped by the cacheify method
    */
-  private async _getApplicationContracts(applicationId: string): Promise<Contract[]> {
+  async getApplicationContracts(applicationId: string): Promise<Contract[]> {
+    const cacheKey = `application:${applicationId}:contracts`;
+    const cachedData = cache.get<Contract[]>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info(`[Cache] Using cached contracts data for application ${applicationId}`);
+      return cachedData;
+    }
+
     try {
-      console.error(`[API] Fetching contracts for application ${applicationId}`);
-      const response: AxiosResponse<{ contracts: Contract[] }> = await this.client.get(`/v1/applications/${applicationId}/contracts`);
+      this.logger.info(`[API] Fetching contracts for application ${applicationId}`);
+      const response: AxiosResponse<{ contracts: Contract[] }> = await this.client.get(
+        `/v1/applications/${applicationId}/contracts`
+      );
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.contracts, DEFAULT_CACHE_TTL.CONTRACTS);
+      
       return response.data.contracts;
     } catch (error) {
-      console.error(`[API] Error fetching contracts for application ${applicationId}:`, error);
-      
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        throw Errors.notFound('Application', applicationId);
-      }
-      
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error(`[API] Error fetching contracts for application ${applicationId}:`, error);
+      throw error;
     }
   }
 
   /**
    * Get licenses for an application
-   * This will be wrapped by the cacheify method
    */
-  private async _getApplicationLicenses(applicationId: string): Promise<License[]> {
+  async getApplicationLicenses(applicationId: string): Promise<License[]> {
+    const cacheKey = `application:${applicationId}:licenses`;
+    const cachedData = cache.get<License[]>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info(`[Cache] Using cached licenses data for application ${applicationId}`);
+      return cachedData;
+    }
+
     try {
-      console.error(`[API] Fetching licenses for application ${applicationId}`);
-      const response: AxiosResponse<{ licenses: License[] }> = await this.client.get(`/v1/applications/${applicationId}/licenses`);
+      this.logger.info(`[API] Fetching licenses for application ${applicationId}`);
+      const response: AxiosResponse<{ licenses: License[] }> = await this.client.get(
+        `/v1/applications/${applicationId}/licenses`
+      );
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.licenses, DEFAULT_CACHE_TTL.LICENSES);
+      
       return response.data.licenses;
     } catch (error) {
-      console.error(`[API] Error fetching licenses for application ${applicationId}:`, error);
-      
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        throw Errors.notFound('Application', applicationId);
-      }
-      
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error(`[API] Error fetching licenses for application ${applicationId}:`, error);
+      throw error;
     }
   }
 
   /**
    * Get users
-   * This will be wrapped by the cacheify method
    */
-  private async _getUsers(): Promise<User[]> {
+  async getUsers(): Promise<User[]> {
+    const cacheKey = 'users';
+    const cachedData = cache.get<User[]>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info('[Cache] Using cached users data');
+      return cachedData;
+    }
+
     try {
-      console.error('[API] Fetching all users');
+      this.logger.info('[API] Fetching users');
       const response: AxiosResponse<{ users: User[] }> = await this.client.get('/v1/users');
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.users, DEFAULT_CACHE_TTL.APPLICATIONS);
+      
       return response.data.users;
     } catch (error) {
-      console.error('[API] Error fetching users:', error);
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error('[API] Error fetching users:', error);
+      throw error;
     }
   }
 
   /**
    * Get shadow IT applications
-   * This will be wrapped by the cacheify method
    */
-  private async _getShadowIT(): Promise<ShadowIT[]> {
+  async getShadowIT(): Promise<ShadowIT[]> {
+    const cacheKey = 'shadow-it';
+    const cachedData = cache.get<ShadowIT[]>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info('[Cache] Using cached shadow IT data');
+      return cachedData;
+    }
+
     try {
-      console.error('[API] Fetching shadow IT applications');
+      this.logger.info('[API] Fetching shadow IT');
       const response: AxiosResponse<{ applications: ShadowIT[] }> = await this.client.get('/v1/shadow-it');
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.applications, DEFAULT_CACHE_TTL.SHADOW_IT);
+      
       return response.data.applications;
     } catch (error) {
-      console.error('[API] Error fetching shadow IT:', error);
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error('[API] Error fetching shadow IT:', error);
+      throw error;
     }
   }
 
   /**
    * Get spend analytics
-   * This will be wrapped by the cacheify method
    */
-  private async _getSpendAnalytics(period: string = 'last12months'): Promise<SpendAnalytics> {
+  async getSpendAnalytics(period: string = 'last12months'): Promise<SpendAnalytics> {
+    const cacheKey = `spend-analytics:${period}`;
+    const cachedData = cache.get<SpendAnalytics>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info('[Cache] Using cached spend analytics data');
+      return cachedData;
+    }
+
     try {
-      console.error(`[API] Fetching spend analytics (period: ${period})`);
-      const response: AxiosResponse<{ spend: SpendAnalytics }> = await this.client.get('/v1/analytics/spend', {
-        params: { period }
-      });
+      this.logger.info('[API] Fetching spend analytics');
+      const response: AxiosResponse<{ spend: SpendAnalytics }> = await this.client.get(
+        '/v1/analytics/spend',
+        { params: { period } }
+      );
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.spend, DEFAULT_CACHE_TTL.SPEND_ANALYTICS);
+      
       return response.data.spend;
     } catch (error) {
-      console.error('[API] Error fetching spend analytics:', error);
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error('[API] Error fetching spend analytics:', error);
+      throw error;
     }
   }
 
   /**
    * Get license optimization recommendations
-   * This will be wrapped by the cacheify method
    */
-  private async _getLicenseRecommendations(): Promise<LicenseRecommendation[]> {
+  async getLicenseRecommendations(): Promise<LicenseRecommendation[]> {
+    const cacheKey = 'license-recommendations';
+    const cachedData = cache.get<LicenseRecommendation[]>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info('[Cache] Using cached license recommendations data');
+      return cachedData;
+    }
+
     try {
-      console.error('[API] Fetching license recommendations');
-      const response: AxiosResponse<{ recommendations: LicenseRecommendation[] }> = await this.client.get('/v1/recommendations/licenses');
+      this.logger.info('[API] Fetching license recommendations');
+      const response: AxiosResponse<{ recommendations: LicenseRecommendation[] }> = await this.client.get(
+        '/v1/recommendations/licenses'
+      );
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.recommendations, DEFAULT_CACHE_TTL.RECOMMENDATIONS);
+      
       return response.data.recommendations;
     } catch (error) {
-      console.error('[API] Error fetching license recommendations:', error);
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error('[API] Error fetching license recommendations:', error);
+      throw error;
     }
   }
 
   /**
    * Get upcoming renewal alerts
-   * This will be wrapped by the cacheify method
    */
-  private async _getRenewalAlerts(daysAhead: number = 90): Promise<RenewalAlert[]> {
+  async getRenewalAlerts(daysAhead: number = 90): Promise<RenewalAlert[]> {
+    const cacheKey = `renewal-alerts:${daysAhead}`;
+    const cachedData = cache.get<RenewalAlert[]>(cacheKey);
+    
+    if (cachedData) {
+      this.logger.info('[Cache] Using cached renewal alerts data');
+      return cachedData;
+    }
+
     try {
-      console.error(`[API] Fetching renewal alerts (days ahead: ${daysAhead})`);
-      const response: AxiosResponse<{ alerts: RenewalAlert[] }> = await this.client.get('/v1/alerts/renewals', {
-        params: { daysAhead }
-      });
+      this.logger.info('[API] Fetching renewal alerts');
+      const response: AxiosResponse<{ alerts: RenewalAlert[] }> = await this.client.get(
+        '/v1/alerts/renewals',
+        { params: { daysAhead } }
+      );
+      
+      // Cache the response
+      cache.set(cacheKey, response.data.alerts, DEFAULT_CACHE_TTL.RENEWAL_ALERTS);
+      
       return response.data.alerts;
     } catch (error) {
-      console.error('[API] Error fetching renewal alerts:', error);
-      throw Errors.serverError(error instanceof Error ? error : new Error(String(error)));
+      this.logger.error('[API] Error fetching renewal alerts:', error);
+      throw error;
     }
-  }
-
-  // Public API methods are automatically cached through cacheify wrapper
-  getApplications!: () => Promise<Application[]>;
-  getApplication!: (id: string) => Promise<Application>;
-  getApplicationUsage!: (id: string, period?: string) => Promise<ApplicationUsage>;
-  getContracts!: () => Promise<Contract[]>;
-  getApplicationContracts!: (applicationId: string) => Promise<Contract[]>;
-  getApplicationLicenses!: (applicationId: string) => Promise<License[]>;
-  getUsers!: () => Promise<User[]>;
-  getShadowIT!: () => Promise<ShadowIT[]>;
-  getSpendAnalytics!: (period?: string) => Promise<SpendAnalytics>;
-  getLicenseRecommendations!: () => Promise<LicenseRecommendation[]>;
-  getRenewalAlerts!: (daysAhead?: number) => Promise<RenewalAlert[]>;
-
-  /**
-   * Clear the API cache
-   */
-  clearCache(): void {
-    console.error('[Cache] Clearing all cached API responses');
-    cacheService.clear();
   }
 }
 
